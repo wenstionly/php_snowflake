@@ -52,10 +52,27 @@ ZEND_END_MODULE_GLOBALS(php_snowflake)
    You are encouraged to rename these macros something shorter, see
    examples in any other php module directory.
 */
-#define PHP_SNOWFLAKE_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(php_snowflake, v)
+#if PHP_API_VERSION < 20151012
 
-#if defined(ZTS) && defined(COMPILE_DL_PHP_SNOWFLAKE)
+# if defined(__x86_64__) || defined(__LP64__) || defined(_LP64) || defined(_WIN64)
+typedef int64_t zend_long;
+# else
+typedef int32_t zend_long;
+# endif
+
+# ifdef ZTS
+#  define PHP_SNOWFLAKE_G(v) TSRMG(php_snowflake_globals_id, zend_php_snowflake_globals *, v)
+# else
+#  define PHP_SNOWFLAKE_G(v) (php_snowflake_globals.v)
+# endif
+
+#else
+
+# define PHP_SNOWFLAKE_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(php_snowflake, v)
+
+# if defined(ZTS) && defined(COMPILE_DL_PHP_SNOWFLAKE)
 ZEND_TSRMLS_CACHE_EXTERN()
+# endif
 #endif
 
 typedef struct IdWorker id_worker;
