@@ -21,32 +21,28 @@
 #ifndef PHP_SNOWFLAKE_H
 #define PHP_SNOWFLAKE_H
 
-extern zend_module_entry php_snowflake_module_entry;
-#define phpext_php_snowflake_ptr &php_snowflake_module_entry
-
-#define PHP_SNOWFLAKE_VERSION "1.0.0"
-
-#ifdef PHP_WIN32
-#	define PHP_SNOWFLAKE_API __declspec(dllexport)
-#elif defined(__GNUC__) && __GNUC__ >= 4
-#	define PHP_SNOWFLAKE_API __attribute__ ((visibility("default")))
-#else
-#	define PHP_SNOWFLAKE_API
-#endif
-
 #ifdef ZTS
 #include "TSRM.h"
 #endif
 
-/*
-  	Declare any global variables you may need between the BEGIN
-	and END macros here:
+extern zend_module_entry php_snowflake_module_entry;
+#define phpext_php_snowflake_ptr &php_snowflake_module_entry
 
-ZEND_BEGIN_MODULE_GLOBALS(php_snowflake)
-	zend_long  global_value;
-	char *global_string;
-ZEND_END_MODULE_GLOBALS(php_snowflake)
-*/
+#define PHP_SNOWFLAKE_VERSION "1.0.1"
+
+#ifdef PHP_WIN32
+# define PHP_SNOWFLAKE_API __declspec(dllexport)
+#elif defined(__GNUC__) && __GNUC__ >= 4
+# define PHP_SNOWFLAKE_API __attribute__ ((visibility("default")))
+#else
+# define PHP_SNOWFLAKE_API
+#endif
+
+# ifdef ZTS
+#  define PHP_SNOWFLAKE_G(v) TSRMG(php_snowflake_globals_id, zend_php_snowflake_globals *, v)
+# else
+#  define PHP_SNOWFLAKE_G(v) (php_snowflake_globals.v)
+# endif
 
 /* Always refer to the globals in your function as PHP_SNOWFLAKE_G(variable).
    You are encouraged to rename these macros something shorter, see
@@ -60,32 +56,25 @@ typedef int64_t zend_long;
 typedef int32_t zend_long;
 # endif
 
-# ifdef ZTS
-#  define PHP_SNOWFLAKE_G(v) TSRMG(php_snowflake_globals_id, zend_php_snowflake_globals *, v)
-# else
-#  define PHP_SNOWFLAKE_G(v) (php_snowflake_globals.v)
-# endif
-
 #else
-
-# define PHP_SNOWFLAKE_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(php_snowflake, v)
 
 # if defined(ZTS) && defined(COMPILE_DL_PHP_SNOWFLAKE)
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
+
 #endif
 
-typedef struct IdWorker id_worker;
-
 // IdWorker Struct
-struct IdWorker {
+ZEND_BEGIN_MODULE_GLOBALS(php_snowflake)
   zend_long worker_id;
   zend_long service_no;
   zend_long last_time_stamp;
   unsigned int sequence;
-};
+ZEND_END_MODULE_GLOBALS(php_snowflake)
 
-#endif	/* PHP_PHP_SNOWFLAKE_H */
+ZEND_EXTERN_MODULE_GLOBALS(php_snowflake);
+
+#endif  /* PHP_PHP_SNOWFLAKE_H */
 
 /*
  * Local variables:

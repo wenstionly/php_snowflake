@@ -34,11 +34,9 @@
 #include "ext/standard/info.h"
 #include "php_snowflake.h"
 
-static id_worker *iw;
-
-/* If you declare any globals in php_snowflake.h uncomment this:
+/* If you declare any globals in php_snowflake.h uncomment this:*/
 ZEND_DECLARE_MODULE_GLOBALS(php_snowflake)
-*/
+
 zend_class_entry *php_snowflake_ce;
 
 static zend_long time_re_gen(zend_long last) {
@@ -52,7 +50,7 @@ static zend_long time_re_gen(zend_long last) {
 	return new_time;
 }
 
-static zend_long getworkid() {
+static zend_long get_workid() {
 	return syscall(SYS_gettid); 
 }
 
@@ -62,25 +60,28 @@ static zend_long time_gen() {
 	return (zend_long)tv.tv_sec * 1000 + (zend_long)tv.tv_usec / 1000;
 }
 
-static void next_id(id_worker *iw, char *id) {
+static void next_id(char *id) {
+#if PHP_API_VERSION < 20151012
+	TSRMLS_FETCH();
+#endif
 	zend_long ts;
 
 	ts = time_gen();
 
-	if (ts == (iw->last_time_stamp)) {
-		iw->sequence = (iw->sequence+1) & MAX_SEQUENCE;
-		if (iw->sequence == 0) {
+	if (ts == PHP_SNOWFLAKE_G(last_time_stamp)) {
+		PHP_SNOWFLAKE_G(sequence) = (PHP_SNOWFLAKE_G(sequence)+1) & MAX_SEQUENCE;
+		if (PHP_SNOWFLAKE_G(sequence) == 0) {
 			ts = time_re_gen(ts);
 		}
 	} else {
-		iw->last_time_stamp = ts;
-		iw->sequence = 1;
+		PHP_SNOWFLAKE_G(last_time_stamp) = ts;
+		PHP_SNOWFLAKE_G(sequence) = 1;
 	}
 
-	if (ts < (iw->last_time_stamp)) {
+	if (ts < PHP_SNOWFLAKE_G(last_time_stamp)) {
 		strcpy(id, NULL);
 	} else {
-		sprintf(id, "00%ld%05ld%08ld%04d", ts, iw->service_no, iw->worker_id, iw->sequence);
+		sprintf(id, "00%ld%05ld%08ld%04d", ts, PHP_SNOWFLAKE_G(service_no), PHP_SNOWFLAKE_G(worker_id), PHP_SNOWFLAKE_G(sequence));
 	}
 }
 
@@ -91,17 +92,15 @@ PHP_METHOD(PhpSnowFlake, nextId) {
 #if PHP_API_VERSION < 20151012
 		TSRMLS_CC
 #endif
-		, "l", &(iw->service_no)) == FAILURE) {
+		, "l", &PHP_SNOWFLAKE_G(service_no)) == FAILURE) {
 		RETURN_FALSE;
 	}
 
-	if ((iw->service_no)>8191 | (iw->service_no)<0) {
+	if (PHP_SNOWFLAKE_G(service_no)>8191 | PHP_SNOWFLAKE_G(service_no)<0) {
 		zend_error(E_ERROR, "service_no in the range of 0,8191");
 	}
 
-	iw->worker_id = getworkid();
-
-	next_id(iw, id);
+	next_id(id);
 
 	if (id == NULL) {
 		RETURN_FALSE;
@@ -158,12 +157,35 @@ zend_function_entry php_snowflake_functions[] = {
 #endif
 /* }}} */
 
+
+static void php_snowflake_ctor(
+#if PHP_API_VERSION < 20151012
+	zend_php_snowflake_globals *iw TSRMLS_DC
+#else
+	zend_php_snowflake_globals *iw
+#endif
+)
+{
+	iw->sequence = 0;
+#ifdef ZTS
+	iw->worker_id = get_workid();
+#endif
+}
+
 /* {{{ PHP_MINIT_FUNCTION
  */
 PHP_MINIT_FUNCTION(php_snowflake)
 {
-	iw = emalloc(sizeof(id_worker));
-	iw->sequence = 0;
+
+#ifdef ZTS
+	ts_allocate_id(&php_snowflake_globals_id, sizeof(zend_php_snowflake_globals), (ts_allocate_ctor)php_snowflake_ctor, NULL);
+#else	
+# if PHP_API_VERSION < 20151012
+	php_snowflake_ctor(&php_snowflake_globals TSRMLS_CC);
+# else
+	php_snowflake_ctor(&php_snowflake_globals);
+# endif
+#endif
 
 	zend_class_entry ce;
 	INIT_CLASS_ENTRY(ce, "PhpSnowFlake", php_snowflake_methods);
@@ -179,11 +201,13 @@ PHP_MINIT_FUNCTION(php_snowflake)
 }
 /* }}} */
 
+
+
 /* {{{ PHP_MSHUTDOWN_FUNCTION
  */
 PHP_MSHUTDOWN_FUNCTION(php_snowflake)
 {
-	efree(iw);
+
 	/* uncomment this line if you have INI entries
 	UNREGISTER_INI_ENTRIES();
 	*/
@@ -196,6 +220,11 @@ PHP_MSHUTDOWN_FUNCTION(php_snowflake)
  */
 PHP_RINIT_FUNCTION(php_snowflake)
 {
+#ifndef ZTS
+	if (!PHP_SNOWFLAKE_G(worker_id)) {
+		PHP_SNOWFLAKE_G(worker_id) = get_workid();
+	}
+#endif	
 #if defined(COMPILE_DL_PHP_SNOWFLAKE) && defined(ZTS) && PHP_API_VERSION >= 20151012
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
