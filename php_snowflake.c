@@ -96,7 +96,7 @@ PHP_METHOD(PhpSnowFlake, nextId) {
 		RETURN_FALSE;
 	}
 
-	if (PHP_SNOWFLAKE_G(service_no)>8191 | PHP_SNOWFLAKE_G(service_no)<0) {
+	if (PHP_SNOWFLAKE_G(service_no)>9999 | PHP_SNOWFLAKE_G(service_no)<0) {
 		zend_error(E_ERROR, "service_no in the range of 0,8191");
 	}
 
