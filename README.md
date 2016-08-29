@@ -6,9 +6,8 @@
 Twitter distributed ID generating Algorithm [SnowFlake](https://github.com/twitter/snowflake) PHP implementation version.
 
 ## Requires
-PHP >= 5.6  (Below 5.5 self-testing)
-
-Not support windows
+* PHP >= 5.6  (Below 5.5 self-testing)
+* Not support windows
 
 ## Description
 Pure PHP can not be achieved SnowFlake algorithm，because version of thread-safe(requires tid)and 
