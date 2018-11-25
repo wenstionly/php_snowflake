@@ -50,12 +50,12 @@ extern zend_module_entry php_snowflake_module_entry;
 */
 #if PHP_API_VERSION < 20151012
 
-# if defined(__x86_64__) || defined(__LP64__) || defined(_LP64) || defined(_WIN64)
+// # if defined(__x86_64__) || defined(__LP64__) || defined(_LP64) || defined(_WIN64)
+// typedef int64_t zend_long;
+// # else
+// typedef int32_t zend_long;
+// # endif
 typedef int64_t zend_long;
-# else
-typedef int32_t zend_long;
-# endif
-
 #else
 
 # if defined(ZTS) && defined(COMPILE_DL_PHP_SNOWFLAKE)
@@ -64,12 +64,26 @@ ZEND_TSRMLS_CACHE_EXTERN()
 
 #endif
 
+#define TWEPOCH       1380902400000L
+#define SEQUENCTBIT   12
+#define SERVICEBIT    8
+#define TMBIT         (64-SEQUENCTBIT-SERVICEBIT)
+
+#define SEQMASK     (-1UL ^ (-1UL << SEQUENCTBIT))
+#define SEQSHIFT    0
+
+#define SERVICEMASK   (-1UL ^ (-1UL << SERVICEBIT))
+#define SERVICESHIFT  (SEQUENCTBIT)
+
+#define TMSHIFT     (SEQUENCTBIT + SERVICEBIT)
+
 // IdWorker Struct
 ZEND_BEGIN_MODULE_GLOBALS(php_snowflake)
-  zend_long worker_id;
-  zend_long service_no;
+  // zend_long worker_id;
+  // zend_long service_no;
   zend_long last_time_stamp;
   unsigned int sequence;
+  // unsigned int seqMap[SERVICEMASK][WORKERMASK];
 ZEND_END_MODULE_GLOBALS(php_snowflake)
 
 ZEND_EXTERN_MODULE_GLOBALS(php_snowflake);
