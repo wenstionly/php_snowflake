@@ -22,6 +22,8 @@
 #include "config.h"
 #endif
 
+// #define MAX_SEQUENCE 8191
+
 #include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
@@ -31,7 +33,6 @@
 #include "php_ini.h"
 #include "ext/standard/info.h"
 #include "php_snowflake.h"
-
 
 /* If you declare any globals in php_snowflake.h uncomment this:*/
 ZEND_DECLARE_MODULE_GLOBALS(php_snowflake)
@@ -49,9 +50,13 @@ static zend_long time_re_gen(zend_long last) {
 	return new_time;
 }
 
-// static zend_long get_workid() {
-// 	return syscall(SYS_gettid);
-// }
+static zend_long get_workid() {
+#ifdef ZTS
+	return syscall(SYS_gettid);
+#else
+	return getpid();
+#endif
+}
 
 static zend_long time_gen() {
 	struct timeval tv;
@@ -71,20 +76,28 @@ static zend_long next_id(zend_long service_no) {
 		PHP_SNOWFLAKE_G(sequence) = (PHP_SNOWFLAKE_G(sequence)+1) & SEQMASK;
 		if (PHP_SNOWFLAKE_G(sequence) == 0) {
 			ts = time_re_gen(ts);
+			PHP_SNOWFLAKE_G(sequence) = 1;
 		}
 	} else {
-		PHP_SNOWFLAKE_G(sequence) = 0;
+		PHP_SNOWFLAKE_G(sequence) = 1;
 	}
 	PHP_SNOWFLAKE_G(last_time_stamp) = ts;
 
 	return ((ts - TWEPOCH) << TMSHIFT) |
 			((service_no & SERVICEMASK) << SERVICESHIFT) |
+			(PHP_SNOWFLAKE_G(worker_id) << WORKERSHIFT) |
 			(PHP_SNOWFLAKE_G(sequence));
+
+	// if (ts < PHP_SNOWFLAKE_G(last_time_stamp)) {
+	// 	strcpy(id, NULL);
+	// } else {
+	// 	sprintf(id, "00%ld%05ld%08ld%04d", ts, PHP_SNOWFLAKE_G(service_no), PHP_SNOWFLAKE_G(worker_id), PHP_SNOWFLAKE_G(sequence));
+	// }
 }
 
 PHP_METHOD(PhpSnowFlake, nextId) {
-	zend_long id;
-	zend_long service_no;
+	zend_long id = 0;
+	zend_long service_no = 0;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS()
 #if PHP_API_VERSION < 20151012
@@ -94,7 +107,7 @@ PHP_METHOD(PhpSnowFlake, nextId) {
 		RETURN_FALSE;
 	}
 
-	if ((service_no)>SERVICEMASK | (service_no)<0) {
+	if (service_no > SERVICEMASK | service_no < 0) {
 		zend_error(E_ERROR, "service_no in the range of 0,%d", SERVICEMASK);
 	}
 
@@ -157,16 +170,14 @@ static void php_snowflake_ctor(
 )
 {
 	iw->sequence = 0;
-// #ifdef ZTS
-// 	iw->worker_id = get_workid();
-// #endif
+	iw->worker_id = 0;//get_workid() & WORKERMASK;
 }
 
 /* {{{ PHP_MINIT_FUNCTION
  */
 PHP_MINIT_FUNCTION(php_snowflake)
 {
-
+	// module init
 #ifdef ZTS
 	ts_allocate_id(&php_snowflake_globals_id, sizeof(zend_php_snowflake_globals), (ts_allocate_ctor)php_snowflake_ctor, NULL);
 #else
@@ -210,10 +221,11 @@ PHP_MSHUTDOWN_FUNCTION(php_snowflake)
  */
 PHP_RINIT_FUNCTION(php_snowflake)
 {
+	// request init
 // #ifndef ZTS
-// 	if (!PHP_SNOWFLAKE_G(worker_id)) {
-// 		PHP_SNOWFLAKE_G(worker_id) = get_workid();
-// 	}
+	if (!PHP_SNOWFLAKE_G(worker_id)) {
+		PHP_SNOWFLAKE_G(worker_id) = get_workid() & WORKERMASK;
+	}
 // #endif
 #if defined(COMPILE_DL_PHP_SNOWFLAKE) && defined(ZTS) && PHP_API_VERSION >= 20151012
 	ZEND_TSRMLS_CACHE_UPDATE();
