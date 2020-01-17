@@ -34,6 +34,14 @@
 #include "ext/standard/info.h"
 #include "php_snowflake.h"
 
+PHP_INI_BEGIN()
+	STD_PHP_INI_ENTRY("php_snowflake.twepoch",      "1380902400000", PHP_INI_SYSTEM, OnUpdateLong, twepoch,      zend_php_snowflake_globals, php_snowflake_globals)
+	STD_PHP_INI_ENTRY("php_snowflake.sequence_bit", "8",             PHP_INI_SYSTEM, OnUpdateLong, sequence_bit, zend_php_snowflake_globals, php_snowflake_globals)
+    STD_PHP_INI_ENTRY("php_snowflake.worker_bit",   "8",             PHP_INI_SYSTEM, OnUpdateLong, worker_bit,   zend_php_snowflake_globals, php_snowflake_globals)
+    STD_PHP_INI_ENTRY("php_snowflake.service_bit",  "4",             PHP_INI_SYSTEM, OnUpdateLong, service_bit,  zend_php_snowflake_globals, php_snowflake_globals)
+PHP_INI_END()
+
+
 /* If you declare any globals in php_snowflake.h uncomment this:*/
 ZEND_DECLARE_MODULE_GLOBALS(php_snowflake)
 
@@ -85,7 +93,7 @@ static zend_long next_id(zend_long service_no) {
 
 	return ((ts - TWEPOCH) << TMSHIFT) |
 			((service_no & SERVICEMASK) << SERVICESHIFT) |
-			(PHP_SNOWFLAKE_G(worker_id) << WORKERSHIFT) |
+			((PHP_SNOWFLAKE_G(worker_id) & WORKERMASK) << WORKERSHIFT) |
 			(PHP_SNOWFLAKE_G(sequence));
 
 	// if (ts < PHP_SNOWFLAKE_G(last_time_stamp)) {
@@ -108,12 +116,31 @@ PHP_METHOD(PhpSnowFlake, nextId) {
 	}
 
 	if (service_no > SERVICEMASK | service_no < 0) {
-		zend_error(E_ERROR, "service_no in the range of 0,%d", SERVICEMASK);
+		zend_error(E_ERROR, "service_no in the range of 0,%lld", SERVICEMASK);
 	}
 
 	id = next_id(service_no);
 
 	RETVAL_LONG(id);
+}
+
+PHP_METHOD(PhpSnowFlake, configure) {
+    array_init(return_value);
+    add_assoc_long(return_value, "worker_id", PHP_SNOWFLAKE_G(worker_id));
+    add_assoc_long(return_value, "last_time_stamp", PHP_SNOWFLAKE_G(last_time_stamp));
+    add_assoc_long(return_value, "sequence", PHP_SNOWFLAKE_G(sequence));
+    add_assoc_long(return_value, "twepoch", PHP_SNOWFLAKE_G(twepoch));
+    add_assoc_long(return_value, "sequence_bit", PHP_SNOWFLAKE_G(sequence_bit));
+    add_assoc_long(return_value, "worker_bit", PHP_SNOWFLAKE_G(worker_bit));
+    add_assoc_long(return_value, "service_bit", PHP_SNOWFLAKE_G(service_bit));
+    add_assoc_long(return_value, "tm_bit", PHP_SNOWFLAKE_G(tm_bit));
+    add_assoc_long(return_value, "seqmask", PHP_SNOWFLAKE_G(seqmask));
+    add_assoc_long(return_value, "seqshift", PHP_SNOWFLAKE_G(seqshift));
+    add_assoc_long(return_value, "workermask", PHP_SNOWFLAKE_G(workermask));
+    add_assoc_long(return_value, "workershift", PHP_SNOWFLAKE_G(workershift));
+    add_assoc_long(return_value, "servicemask", PHP_SNOWFLAKE_G(servicemask));
+    add_assoc_long(return_value, "serviceshift", PHP_SNOWFLAKE_G(serviceshift));
+    add_assoc_long(return_value, "tmshift", PHP_SNOWFLAKE_G(tmshift));
 }
 
 /* }}} */
@@ -127,6 +154,9 @@ PHP_METHOD(PhpSnowFlake, nextId) {
  */
 ZEND_BEGIN_ARG_INFO_EX(php_snowflake_next_id, 0, 0, 1)
 	ZEND_ARG_INFO(0, service_no)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(php_snowflake_configure, 0, 0, 0)
 ZEND_END_ARG_INFO()
 /* }}} */
 
@@ -148,6 +178,7 @@ static void php_php_snowflake_init_globals(zend_php_snowflake_globals *php_snowf
  */
 const zend_function_entry php_snowflake_methods[] = {
 	PHP_ME(PhpSnowFlake, nextId, php_snowflake_next_id, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+	PHP_ME(PhpSnowFlake, configure, php_snowflake_configure, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
 	PHP_FE_END
 };
 
@@ -195,9 +226,18 @@ PHP_MINIT_FUNCTION(php_snowflake)
 #else
 	php_snowflake_ce = zend_register_internal_class_ex(&ce, NULL);
 #endif
-	/* If you have INI entries, uncomment these lines
+	/* If you have INI entries, uncomment these lines */
 	REGISTER_INI_ENTRIES();
-	*/
+
+    // 初始化掩码等设置
+    PHP_SNOWFLAKE_G(tm_bit) = 64 - PHP_SNOWFLAKE_G(sequence_bit) - PHP_SNOWFLAKE_G(worker_bit) - PHP_SNOWFLAKE_G(service_bit);
+    PHP_SNOWFLAKE_G(seqmask) = -1UL ^ (-1UL << PHP_SNOWFLAKE_G(sequence_bit));
+    PHP_SNOWFLAKE_G(seqshift) = 0;
+    PHP_SNOWFLAKE_G(workermask) = -1UL ^ (-1UL << PHP_SNOWFLAKE_G(worker_bit));
+    PHP_SNOWFLAKE_G(workershift) = PHP_SNOWFLAKE_G(sequence_bit);
+    PHP_SNOWFLAKE_G(servicemask) = -1UL ^ (-1UL << PHP_SNOWFLAKE_G(service_bit));
+    PHP_SNOWFLAKE_G(serviceshift) = PHP_SNOWFLAKE_G(sequence_bit) + PHP_SNOWFLAKE_G(worker_bit);
+    PHP_SNOWFLAKE_G(tmshift) = PHP_SNOWFLAKE_G(serviceshift) + PHP_SNOWFLAKE_G(service_bit);
 	return SUCCESS;
 }
 /* }}} */
@@ -209,9 +249,9 @@ PHP_MINIT_FUNCTION(php_snowflake)
 PHP_MSHUTDOWN_FUNCTION(php_snowflake)
 {
 
-	/* uncomment this line if you have INI entries
+	/* uncomment this line if you have INI entries */
 	UNREGISTER_INI_ENTRIES();
-	*/
+
 	return SUCCESS;
 }
 /* }}} */
@@ -224,7 +264,7 @@ PHP_RINIT_FUNCTION(php_snowflake)
 	// request init
 // #ifndef ZTS
 	if (!PHP_SNOWFLAKE_G(worker_id)) {
-		PHP_SNOWFLAKE_G(worker_id) = get_workid() & WORKERMASK;
+		PHP_SNOWFLAKE_G(worker_id) = get_workid();// & WORKERMASK;
 	}
 // #endif
 #if defined(COMPILE_DL_PHP_SNOWFLAKE) && defined(ZTS) && PHP_API_VERSION >= 20151012
@@ -247,14 +287,48 @@ PHP_RSHUTDOWN_FUNCTION(php_snowflake)
  */
 PHP_MINFO_FUNCTION(php_snowflake)
 {
+    char buffer[100];
 	php_info_print_table_start();
 	php_info_print_table_header(2, "php_snowflake", "enabled");
 	php_info_print_table_row(2, "version", PHP_SNOWFLAKE_VERSION);
 	php_info_print_table_end();
 
-	/* Remove comments if you have entries in php.ini
+	/* Remove comments if you have entries in php.ini */
 	DISPLAY_INI_ENTRIES();
-	*/
+
+	php_info_print_table_start();
+	php_info_print_table_header(2, "param", "value");
+    sprintf(buffer, "%lld(%llx)", PHP_SNOWFLAKE_G(worker_id), PHP_SNOWFLAKE_G(worker_id));
+	php_info_print_table_row(2, "worker id", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(last_time_stamp));
+	php_info_print_table_row(2, "last timestamp", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(sequence));
+	php_info_print_table_row(2, "sequence", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(twepoch));
+	php_info_print_table_row(2, "twepoch", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(sequence_bit));
+	php_info_print_table_row(2, "sequence bit", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(worker_bit));
+	php_info_print_table_row(2, "worker bit", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(service_bit));
+	php_info_print_table_row(2, "service bit", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(tm_bit));
+	php_info_print_table_row(2, "tm bit", buffer);
+    sprintf(buffer, "%llx", PHP_SNOWFLAKE_G(seqmask));
+	php_info_print_table_row(2, "seqmask", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(seqshift));
+	php_info_print_table_row(2, "seqshift", buffer);
+    sprintf(buffer, "%llx", PHP_SNOWFLAKE_G(workermask));
+	php_info_print_table_row(2, "workermask", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(workershift));
+	php_info_print_table_row(2, "workershift", buffer);
+    sprintf(buffer, "%llx", PHP_SNOWFLAKE_G(servicemask));
+	php_info_print_table_row(2, "servicemask", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(serviceshift));
+	php_info_print_table_row(2, "serviceshift", buffer);
+    sprintf(buffer, "%lld", PHP_SNOWFLAKE_G(tmshift));
+	php_info_print_table_row(2, "tmshift", buffer);
+	php_info_print_table_end();
 }
 /* }}} */
 

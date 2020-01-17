@@ -28,7 +28,7 @@
 extern zend_module_entry php_snowflake_module_entry;
 #define phpext_php_snowflake_ptr &php_snowflake_module_entry
 
-#define PHP_SNOWFLAKE_VERSION "1.0.1"
+#define PHP_SNOWFLAKE_VERSION "1.0.2"
 
 #ifdef PHP_WIN32
 # define PHP_SNOWFLAKE_API __declspec(dllexport)
@@ -52,6 +52,7 @@ extern zend_module_entry php_snowflake_module_entry;
 
 // # if defined(__x86_64__) || defined(__LP64__) || defined(_LP64) || defined(_WIN64)
 typedef int64_t zend_long;
+typedef uint64_t zend_ulong;
 // # else
 // typedef int32_t zend_long;
 // # endif
@@ -64,22 +65,22 @@ ZEND_TSRMLS_CACHE_EXTERN()
 
 #endif
 
-#define TWEPOCH       1380902400000L
-#define SEQUENCTBIT   8
-#define WORKERBIT     8
-#define SERVICEBIT    4
-#define TMBIT         (64 - SEQUENCTBIT - WORKERBIT - SERVICEBIT)
+#define TWEPOCH       PHP_SNOWFLAKE_G(twepoch)//1380902400000L
+#define SEQUENCTBIT   PHP_SNOWFLAKE_G(sequence_bit)//8
+#define WORKERBIT     PHP_SNOWFLAKE_G(worker_bit)//8
+#define SERVICEBIT    PHP_SNOWFLAKE_G(service_bit)//4
+#define TMBIT         PHP_SNOWFLAKE_G(tm_bit)//(64 - SEQUENCTBIT - WORKERBIT - SERVICEBIT)
 
-#define SEQMASK     (-1UL ^ (-1UL << SEQUENCTBIT))
-#define SEQSHIFT    0
+#define SEQMASK       PHP_SNOWFLAKE_G(seqmask)//(-1UL ^ (-1UL << SEQUENCTBIT))
+#define SEQSHIFT      PHP_SNOWFLAKE_G(seqshift)//0
 
-#define WORKERMASK  (-1UL ^ (-1UL << WORKERBIT))
-#define WORKERSHIFT SEQUENCTBIT
+#define WORKERMASK    PHP_SNOWFLAKE_G(workermask)//(-1UL ^ (-1UL << WORKERBIT))
+#define WORKERSHIFT   PHP_SNOWFLAKE_G(workershift)//SEQUENCTBIT
 
-#define SERVICEMASK   (-1UL ^ (-1UL << SERVICEBIT))
-#define SERVICESHIFT  (SEQUENCTBIT + WORKERBIT)
+#define SERVICEMASK   PHP_SNOWFLAKE_G(servicemask)//(-1UL ^ (-1UL << SERVICEBIT))
+#define SERVICESHIFT  PHP_SNOWFLAKE_G(serviceshift)//(SEQUENCTBIT + WORKERBIT)
 
-#define TMSHIFT     (SEQUENCTBIT + WORKERBIT + SERVICEBIT)
+#define TMSHIFT       PHP_SNOWFLAKE_G(tmshift)//(SEQUENCTBIT + WORKERBIT + SERVICEBIT)
 
 // IdWorker Struct
 ZEND_BEGIN_MODULE_GLOBALS(php_snowflake)
@@ -87,6 +88,20 @@ ZEND_BEGIN_MODULE_GLOBALS(php_snowflake)
   // zend_long service_no;
   zend_long last_time_stamp;
   zend_long sequence;
+
+  zend_long twepoch;
+  zend_long sequence_bit;
+  zend_long worker_bit;
+  zend_long service_bit;
+  zend_long tm_bit;
+
+  zend_long seqmask;
+  zend_long seqshift;
+  zend_long workermask;
+  zend_long workershift;
+  zend_long servicemask;
+  zend_long serviceshift;
+  zend_long tmshift;
 ZEND_END_MODULE_GLOBALS(php_snowflake)
 
 ZEND_EXTERN_MODULE_GLOBALS(php_snowflake);
