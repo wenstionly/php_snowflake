@@ -9,7 +9,18 @@ dnl If your extension references something external, use with:
 
 PHP_ARG_WITH(php_snowflake, for php_snowflake support,
 dnl Make sure that the comment is aligned:
-[  --with-php_snowflake             Include php_snowflake support])
+[  --with-php_snowflake    Include php_snowflake support])
+
+AC_ARG_ENABLE(debug,
+[  --enable-debug          Enable Debug Support], [PHP_DEBUG=$enableval], [PHP_DEBUG=no])
+
+if test "$PHP_DEBUG" != "no"; then
+  CFLAGS="-O0 -g -DDEBUG"
+  CXXFLAGS="-O0 -g -DDEBUG"
+else
+  CFLAGS="-O2"
+  CXXFLAGS="-O2"
+fi
 
 dnl Otherwise use enable:
 
